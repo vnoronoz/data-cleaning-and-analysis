@@ -1,0 +1,516 @@
+---
+title: "Práctica 2 - Limpieza y análisis de datos"
+author: "Carmelo León Suárez y Vanesa Navarro Oronoz"
+date: "Mayo 2021"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    highlight: default
+    number_sections: yes
+    toc: yes
+    toc_depth: 2
+  word_document: default
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+subtitle: Tipología y ciclo de vida de los datos, UOC
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Importamos las librearías necesarias
+library(ggplot2)
+library(skimr)
+library(knitr)
+#library(kableExtra)
+library(pROC)
+library(corrplot)
+```
+
+******
+# Descripción del dataset. ¿Por qué es importante y qué pregunta/problema pretende responder?
+****** 
+Se utiliza la función `read.csv()` para la lectura del archivo ya que está delimitados por comas. Se guardan los datos en el dataframe `data`.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Leemos el archivo de datos
+data <- read.csv("./Pokemon.csv",header=T)
+```
+
+Mostramos una muestra del dataset
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Muestra dedataset
+head(data)
+```
+
+Con la función `str()` examinamos los valores resumen de cada tipo de variable. Así podemos ver que los datos están compuestos por 800 registros y 13 variables o atributos. Estos atributos, son de tipo enteros y character.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Verificamos la estructura del conjunto de datos
+str(data)
+```
+
+Aplicamos la función `summary()` para obtener una estadística descriptiva simple de cada variable:
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Estadísticas básicas
+summary(data)
+```
+
+Con la siguiente función obtenemos más información de dataset como valores nulos e histogramas de las variables.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+skim(data)
+```
+
+
+Tabla con el resumen y descripción de las variables:
+
+VARIABLE    | TIPO      |  DESCRIPCIÓN    
+----------- | --------  | --------------------------------
+X.          | integer   | ID de cada Pokémon
+Name        | character | Nombre de cada Pokémon
+Type.1      | character | El tipo principal de Pokémon, esto determina la debilidad / resistencia a los ataques
+Type.2      | character | El tipo secundario de Pokémon si lo tiene 
+Total       | integer   | Suma de todas las estadísticas, una guía general de qué tan fuerte es un Pokémon
+HP          | integer   | Puntos de golpe, o salud, define cuánto daño puede soportar un Pokémon antes de desmayarse
+Attack      | integer   | El ataque base de los Pokémon para ataques normales 
+Defense     | integer   | La defensa base de los Pokémon contra ataques normales
+Sp..Atk     | integer   | Ataque especial, el modificador base para ataques especiales
+Sp..Def     | integer   | La resistencia base al daño contra ataques especiales
+Speed       | integer   | Determina qué Pokémon ataca primero en cada ronda 
+Generation  | integer   | La generación numerada en la que se introdujo por primera vez el Pokémon
+Legendary   | character | Indica si el Pokémon es legendario
+
+El dataset y el resumen lo hemos obtenido del siguiente repositorio:
+
+https://www.kaggle.com/abcsds/pokemon
+
+La razón por la que hemos cogido este dataset es para salirnos un poco de lo habitual y además trabajar con un dataset que aunque no tenga una acogida muy grande si creo que hay un sector de niños y no tan niños que han jugado a este juego de realidad aumentada o son apasionados de los distintos productos que existen de ellos. Este conjunto de datos puede ser de gran utilidad para enseñar estadística a los niños y jóvenes con un tema de interés para ellos. 
+
+Identificar patrones con distintos estadísticos puede ser interesante para los amantes de juego, dibujos y cómics.
+
+Con este conjunto de datos, podríamos responder las siguientes preguntas:
+
+*¿Siguen algún patrón las características de los Pokémon?
+*¿Están relacionados los atributos de los Pokémon?
+*¿Los Pokémon de fuego tienen mejor ataque que los de agua?
+*¿Es posible construir un modelo predictor para identificar Pokémon legendarios?
+
+******
+# Integración y selección de los datos de interés a analizar.
+****** 
+Debido a las características del dataset no es necesario hacer ninguna integración y nos quedamos con todos los datos
+
+******
+# Limpieza de los datos.
+****** 
+
+## ¿Los datos contienen ceros o elementos vacíos? ¿Cómo gestionarías cada uno de estos casos?
+
+Para tener una información global y completa del dataset, se van a buscar los registros vacíos o Na existentes para conocimiento y posterior tratamiento.  A pesar de que la función skim() ya nos ha dado parte de esta información hacemos pruebas especificas.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Estadísticas de valores vacíos
+colSums(is.na(data))
+```
+No hay registros con NA.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Estadísticas de variables con cadenas vacías 
+colSums(data=="")
+```
+
+En este resumen vemos que en la columna Type.2 hay 386 registros que están vacíos. Algo que ya nos indicaba la descripción del dataset.
+
+Convertimos a datos de tipo factor los atributos: Type.1, Type.2 y Legendary.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Creamos factor
+data$Type.1 <- as.factor(data$Type.1)
+data$Type.2 <- as.factor(data$Type.2)
+data$Legendary <- as.factor(data$Legendary)
+
+#Mostramos los valores de los factores
+table(data$Type.1)
+table(data$Type.2)
+table(data$Legendary)
+```
+
+**Imputación de valores vacíos en atributo Type.2**
+
+Como se ha visto anteriormente, la columna Type.2, que describe el tipo secundario del pokémon, contiene 386 registros vacíos. Vamos a imputar un tipo secundario a esos pokémon basándonos en el tipo secundario más frecuente para cada tipo primario. Para ello, creamos la tabla de contingencia entre las variables Type.1 y Type.2 y posteriormente la tabla de frecuencias relativas.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Tablas contingencia y frecuencia
+ctable <- table(data$Type.1, data$Type.2)
+tabla_frel <- prop.table(ctable, margin=1)
+tabla_frel
+```
+
+
+De esta forma podemos obtener los valores más frecuentes para el Type.2 en función del Type.1. Siendo esto así, procedemos a la imputación de esos valores en el dataset.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Imputación de valores
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Bug", "Flying", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Dark", "Flying", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Dragon", "Flying", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Electric", "Flying", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Fairy", "Flying", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Fighting", "Psychic", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Fire", "Ground", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Flying", "Dragon", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Ghost", "Grass", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Grass", "Poison", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Ground", "Rock", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Ice", "Water", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Normal", "Flying", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Poison", "Dark", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Psychic", "Fairy", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Rock", "Ground", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Steel", "Psychic", data$Type.2)
+data$Type.2 <- ifelse(data$Type.2=="" & data$Type.1=="Water", "Ground", data$Type.2)
+```
+
+Volvemos a realizar el análisis de cadenas vacías para confirmar que ya no existen.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Estadísticas de variables con cadenas vacías 
+colSums(data=="")
+```
+
+
+Análisis de variables cuantitativas del dataset
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Creamos dataset para la variables cuantitativas
+temp <- data[c(6:11)]
+```
+
+## Identificación y tratamiento de valores extremos.
+
+Mostramos los boxplot de estas variables que nos ayudaran a detectar la existencia de valores atípicos o outliers.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Mostramos boxplot
+boxplot(temp)
+
+#Valores extremos y sus posiciones en HP:
+values <- boxplot.stats(temp$HP)$out
+idx <- which( temp$HP %in% values)
+
+cat("\nValores extremos en HP:", toString(values), "\n" )
+
+HP_outliers <- temp[idx,]
+HP_outliers %>% kable( caption="Valores atipicos de HP")
+
+#Valores extremos y sus posiciones en Attack:
+values <- boxplot.stats(temp$Attack)$out
+idx <- which( temp$Attack %in% values)
+
+cat("\nValores extremos en Attack:", toString(values), "\n" )
+
+HP_outliers <- temp[idx,]
+HP_outliers %>% kable( caption="Valores atipicos de Attack")
+
+#Valores extremos y sus posiciones en Defense:
+values <- boxplot.stats(temp$Defense)$out
+idx <- which( temp$Defense %in% values)
+
+cat("\nValores extremos en Defense:", toString(values), "\n" )
+
+HP_outliers <- temp[idx,]
+HP_outliers %>% kable( caption="Valores atipicos de Defense")
+
+#Valores extremos y sus posiciones en Sp..Atk:
+values <- boxplot.stats(temp$Sp..Atk)$out
+idx <- which( temp$Sp..Atk %in% values)
+
+cat("\nValores extremos en Sp..Atk:", toString(values), "\n" )
+
+HP_outliers <- temp[idx,]
+HP_outliers %>% kable( caption="Valores atipicos de Sp..Atk")
+
+#Valores extremos y sus posiciones en Sp..Def:
+values <- boxplot.stats(temp$Sp..Def)$out
+idx <- which( temp$Sp..Def %in% values)
+
+cat("\nValores extremos en Sp..Def:", toString(values), "\n" )
+
+HP_outliers <- temp[idx,]
+HP_outliers %>% kable( caption="Valores atipicos de Sp..Def")
+
+#Valores extremos y sus posiciones en Speed:
+values <- boxplot.stats(temp$Speed)$out
+idx <- which( temp$Speed %in% values)
+
+cat("\nValores extremos en Speed:", toString(values), "\n" )
+
+HP_outliers <- temp[idx,]
+HP_outliers %>% kable( caption="Valores atipicos de Speed")
+
+```
+
+El boxplot nos confirma la presencia de valores atípicos pero que consideramos posibles y por tanto no creemos que haya que realizar ningún tipo de acción.
+
+******
+# Análisis de los datos.
+****** 
+
+##Selección de los grupos de datos que se quieren analizar/comparar (planificación de los análisis a aplicar).
+
+La idea es analizar los datos cuantitativos que ya hemos trabajado anteriormente en primera estancia. A partir de aquí estudiaremos su normalidad, revisaremos si hay alguna correlación entre ellas y para finalizar predeciremos los valores de Tipo2 que están vacíos y daremos respuesta a la siguiente pregunta:
+
+  ¿Los pokemon de fuego tienen mejor ataque que los de agua?
+
+## Comprobación de la normalidad y homogeneidad de la varianza.
+
+### Estudio visual
+
+A continuación hacemos un análisis visual de la normalidad de los tributos cuantitativos primero con un gráfico de densidad y luego con un gráfico cuantil cuantil.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+par(mfrow=c(2,3))
+for(i in 1:ncol(temp)) {
+  print(ggplot(mapping= aes(x=temp[,i]))+ geom_density() + geom_vline(aes(xintercept=mean(temp[,i])),
+            color="blue", linetype="dashed", size=1)+  xlab(colnames(temp)[i]))
+}
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+par(mfrow=c(2,3))
+for(i in 1:ncol(temp)) {
+  qqnorm(temp[,i],main = paste("Normal Q-Q Plot for ",colnames(temp)[i]))
+  qqline(temp[,i],col="red")
+}
+```
+
+A la vista de los datos no podemos afirmar que sigan una distribución normal por lo que a continuación realizaremos un test de normalidad para asegurar el resultado.
+
+###Test de normalidad
+
+El test de Shapiro-Wilks plantea la hipótesis nula que una muestra proviene de una distribución normal. Elegimos un nivel de significancia, por ejemplo 0,05, y tenemos una hipótesis alternativa que sostiene que la distribución no es normal.
+
+Tenemos:
+
+**H~0~ : La distribución es normal**
+
+**H~1~ : La distribución no es normal**
+
+
+El test Shapiro-Wilks intenta rechazar la hipótesis nula a nuestro nivel de significancia. Para realizar el test usamos la función `shapiro.test` en R:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Test shapiro-wilks para todas las variables cuantitativas
+for(i in 1:ncol(temp)) {
+  norm_test <- shapiro.test(temp[,i])
+  print(paste("p-valor para", colnames(temp)[i], norm_test$p.value))
+}
+```
+
+Vemos que en todos los casos el valor de probabilidad (p) es muy inferior al nivel de significancia (0,05), por lo que rechazamos la hipótesis nula, y por tanto, concluimos que las variables no siguen una distribución normal y por lo tanto tampoco es necesario hacer el test de varianzas.
+
+## Aplicación de pruebas estadísticas para comparar los grupos de datos. En función de los datos y el objetivo del estudio, aplicar pruebas de contraste de hipótesis, correlaciones, regresiones, etc. Aplicar al menos tres métodos de análisis diferentes.
+
+### Correlación entre variables
+
+Vamos a estudiar la correlación de todas las variables cuantitativas.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Calculamos la matriz de correlación
+cor(temp) %>% kable( caption="Matriz de correlaciónd de varibles cuantitativas")
+```
+
+
+Atendiendo a los resultados de la matriz no podemos afirmar que haya alguna correlación fuerte entre alguna de las variables.
+
+
+### Contraste de Hipótesis
+  
+Pregunta de investigación: ¿Los Pokémon de fuego tienen mejor ataque que los de agua?
+
+**Hipótesis nula:** Los Pokémon de fuego tienen un ataque peor o igual que los de agua.
+
+**Hipótesis alternativa:** Los Pokémon de fuego tienen mejor ataque que los de agua.
+  
+  **H~0~ : μ~fuego~ <= μ~agua~**
+
+  **H~1~ : μ~fuego~ > μ~agua~**
+  
+Para comenzar el análisis extraemos las muestras del estudio, una para los Pokémon de fuego y otra para los Pokémon de agua.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#División de muestras
+poke_fire <- data[ data$Type.1=="Fire",]
+poke_water <- data[ data$Type.1=="Water",]
+```
+
+Aplicamos un test paramétrico usando la distribución T-student (T-student se asemeja a la distribución normal para muestras grandes n>30) sobre la diferencia de medias de las dos muestras independientes mediante la función t.test de R con un nivel de confianza del 95%. 
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Aplicacion del t-test
+t.test(poke_fire$Attack, poke_water$Attack, alternative="greater", conf.level = 0.95)
+```
+
+El p-valor es menor que el nivel de significancia (0.01 < 0.05), lo cual significa que podemos rechazar la hipótesis nula a favor de la hipótesis alternativa. Podemos concluir con un 95% de nivel de confianza que el ataque de los pokémon de fuego es mejor que el ataque de los pokémon de agua.
+
+### Regresión logística
+
+A continuación, vamos a crear un modelo de regresion logistica para predecir la probabilidad de que un pokémon sea legendario. Aplicaremos este método ya que la variable Legendario es una variable dicotómica dependiente.
+Filtramos las columnas necesarias.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Seleccionamos las variables para la regresión
+data_mlog <- data[c(2:3,6:11,13)]
+```
+
+En la regresión logística se modela la probabilidad de que la variable respuesta Y (en este caso ser Legendario) pertenezca al nivel de referencia en función del valor que adquieran los predictores, mediante el uso de LOG of ODDs.Permite calcular la probabilidad de que la variable dependiente pertenezca a cada una de las categorías en función del valor que adquieran las variables independientes. 
+Calculamos el modelo de regresión logística:
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Creamos el modelo de regresión logística
+model_regresion_log <- glm(Legendary ~ HP + Attack + Defense + Sp..Atk + Sp..Def + Speed, data=data_mlog, family="binomial"(link=logit))
+summary(model_regresion_log)
+```
+Los coeficientes nos dan el cambio en el logaritmo de Legendary (logit) como resultado de un aumento de una unidad en cada una de las variables predictoras (HP, Attack, ...). Si miramos el p-valor de los coeficientes, vemos que todos son estadísticamente significativos en el análisis.
+
+Calculamos la razón de ventajas (OR) que permite cuantificar el efecto de las variables explicativas en la respuesta (Incremento proporcional en la ventaja o probabilidad de éxito, al aumentar una unidad la variable manteniendo las demás fijas). Para la interpretación de los coeficientes los exponenciamos y obtenemos así los Odds ratio/razón de ventajas/OR. También listamos los intervalos de confianza de los coeficientes del modelo para mayor información.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Razon de ventajas e intervalos de confianza
+exp(cbind(OR = coef(model_regresion_log), confint(model_regresion_log)))
+```
+La interpretación del odds-ratio es que valores mayores que 1 indican que si el predictor aumenta los odds de la variable dependiente crecen. Inversamente, un valor menor que 1 indica que tal como el predictor aumente el odds del resultado decrece.
+
+- Un OR = 1 implica que no existe asociación entre la variable respuesta y la covariable.
+- Un OR inferior a la unidad se interpreta como un factor de protección, es decir, el suceso es menos probable en presencia de dicha covariable.
+- Un OR mayor a la unidad se interpreta como un factor de riesgo, es decir, el suceso es más probable en presencia de dicha covariable.
+
+En nuestro caso todos los OR son mayores a la unidad por lo que concluimos que todos los atributos son factores de riesgo en este análisis.
+
+**Curva ROC**
+
+Vamos a analizar el rendimiento del modelo creado con la curva ROC. El análisis ROC proporciona un modo de seleccionar modelos posiblemente óptimos y subóptimos basado en la calidad de la clasificación a diferentes niveles o umbrales. Para tener una regla objetiva de comparación de las curvas ROC, se calcula el área bajo la curva, simplemente llamada AUROC (area under the ROC). 
+
+En general:
+
+• Si AUROC ≤ 0,5, el modelo no ayuda a discriminar.
+
+• Si 0,6 ≤ AUROC < 0,8, el modelo discrimina de manera adecuada.
+
+• Si 0,8 ≤ AUROC < 0,9, el modelo discrimina de forma excelente.
+
+• Si AUROC ≥ 0,9, el modelo discrimina de modo excepcional.
+
+Dibujamos la curva ROC:
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Gráfico curva ROC
+prob=predict(model_regresion_log, data, type="response")
+r=roc(data_mlog$Legendary, prob, data=data_mlog)
+plot (r)
+```
+Y a continuación calculamos el área debajo de la curva:
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Área debajo de la curva
+auc(r)
+```
+Como el valor obtenido es 0.9745, podemos decir que el modelo de regresión creado discrimina de forma excepcional.
+
+Por último vamos a realizar algunas predicciones con el modelo generado en base a los valores de los atributos de unos pokémon de ejemplo. El modelo predice la probabilidad de que el pokémon introducido sí sea legendario (valor de referencia).
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Predicción de nuevos Pokémon
+new_pokemon1 <- data.frame(HP=105, Attack=109, Defense=121, Sp..Atk=113, Sp..Def=105, Speed=111)
+pr <- predict(model_regresion_log, newdata = new_pokemon1, type = 'response')
+pr
+```
+En este caso, con los valores introducidos de HP=105, Attack=109, Defense=121, Sp..Atk=113, Sp..Def=105, Speed=111, el pokémon tiene una probabilidad del 86% de ser legendario.
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Predicción de nuevos Pokémon
+new_pokemon2 <- data.frame(HP=87, Attack=78, Defense=59, Sp..Atk=67, Sp..Def=65, Speed=81)
+pr <- predict(model_regresion_log, newdata = new_pokemon2, type = 'response')
+pr
+```
+Con estos otros valores, HP=87, Attack=78, Defense=59, Sp..Atk=67, Sp..Def=65, Speed=81, el pokémon tiene una probabilidad del 0.2% de ser legendario.
+
+******
+# Representación de los resultados a partir de tablas y gráficas.
+******
+
+A continuación vamos a presentar una serie de gráficas que completan el estudio que ya se ha realizado. Durante el análisis se han presentado tablas y gráficas que apoyaban lo explicado y daban detalle de los procesos, por lo que la información que ahora se presenta es un resumen que completa de manera visual lo ya analizado.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+ggplot(data, aes(x=data$Type.1))+
+  geom_bar(stat="count", width=0.7, fill="steelblue")+
+  labs(title="Recuento de pokémon por tipo primario",y="Recuento",x="Tipo pokémon") +
+  theme(text = element_text(size=12),
+  axis.text.x = element_text(angle=90, hjust=1, vjust = 0.25)) 
+```
+
+Gráfico resumen con los tipos pokémon presentes en el conjunto de datos. Los más numeros son los de tipo agua, seguidos por los del tipo normal, bug y grass.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Gráfico de correlación de las variables cuantitativas
+corrplot(cor(temp) ,method="circle")
+```
+
+En el gráfico anterior tenemos la matriz de correlación entre las variables cuantitativas del estudio representada gráficamente donde se observa que ninguna de ellas está fuertemente correlacionada.
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+ggplot() +
+  geom_density(data=poke_fire, aes(x = poke_fire$Attack, color= "Pokemon Fuego")) +
+  geom_density(data=poke_water, aes(x = poke_water$Attack, color= "Pokemon Agua"))+labs(title="Valores Ataque Pokemon agua vs Pokemon fuego",y="Density",x="Ataque")
+```
+
+En esta representación vemos como la media del ataque de los pokémon de agua se sitúa claramente entre 60 y 80, mientras que la de los de fuego se sitúa más a la derecha, habiendo una mayor densidad de pokemons de fuego con ataque entre 90 y 160. Este gráfico viene a confirmar el contraste de hipótesis anteriormente realizado.
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+ggplot(data,aes(x=data$Type.1,fill=data$Legendary))+geom_histogram(stat="count")+labs(title="Frecuencia de pokémon legendarios segun su tipo primario",y="Recuento",x="Tipo pokémon")+ scale_fill_brewer(palette="Set1")+
+  theme(text = element_text(size=12),
+  axis.text.x = element_text(angle=90, hjust=1, vjust = 0.25))
+```
+
+En esta gráfica vemos que la familia de pokémon más potente (la que posee más legendarios) son los Psychic seguidos de los Dragon.
+
+******
+# Exportación del archivo final
+******
+
+Una vez finalizado el proceso de limpieza y análisis de nuestro dataset, lo guardamos.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+write.csv(data, file = "pokemon_clean.csv", row.names = FALSE)
+```
+
+******
+# Resolución del problema. A partir de los resultados obtenidos, ¿cuáles son las conclusiones? ¿Los resultados permiten responder al problema?
+******
+
+* Se ha realizado el análisis exploratorio, visual y la limpieza de un conjunto de datos sobre Pokémon que consta de 800 registros y 13 variables.
+* El dataset es de acceso público y se puede descargar en: https://www.kaggle.com/abcsds/pokemon.
+* El conjunto de datos contiene información acerca de las características de cada Pokémon, cuantificando su poder de ataque, defensa, velocidad y salud.
+* Durante el proyecto se han realizado las siguientes pruebas: un estudio de correlaciones entre las variables cuantitativas, un contraste de hipótesis entre dos tipos de pokémon y un modelo de regresión logística para la predicción del atributo Legendario.
+* Las preguntas de investigación que se planteaban al inicio del proyecto eran: ¿Siguen algún patrón las características de los Pokémon? ¿Están relacionados los atributos de los Pokémon? ¿Los Pokémon de fuego tienen mejor ataque que los de agua? ¿Es posible construir un modelo predictor para identificar Pokémon legendarios?
+* Una vez concluido el análisis podemos dar respuesta a las cuestiones planteadas.
+* Las características o atributos de los Pokémon no siguen una distribución normal, ni están relacionadas entre ellas.
+* Se puede concluir con nivel de confianza del 95% que el ataque de los pokémon de fuego es mejor que el ataque de los pokémon de agua.
+* Se ha construido un modelo de regresión logística en el que la variable dependiente es Legendario y las variables independientes HP, Attack, Defense, Sp..Atk, Sp..Def y Speed. Para ver el rendimiento del modelo se ha calculado el área debajo de la curva ROC, obteniendo un valor de 0.9745, lo cual indica que el modelo discrimina de forma excepcional.
+* Se han hecho predicciones con el modelo creado para calcular la probabilidad de ser legendarios de dos pokémon diferentes.
+
+
+******
+# Contribuciones
+******
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.align='center'}
+knitr::include_graphics("./tabla_contribuciones.jpeg")  
+```
+
+******
+# Referencias bibliográficas
+******
+
+SUBIRATS MATÉ, Laia, CALVO GONZÁLEZ, Mireia y PÉREZ TRENARD, Diego Oswaldo. *Introducción a la limpieza y análisis de los datos.* [en línea]. Barcelona: UOC, (s/f). Disponible en: https://materials.campus.uoc.edu/daisy/Materials/PID_00265704/pdf/PID_00265704.pdf
+
+*Pokemon with stats.* [en línea]. [fecha de consulta:17 de mayo 2021]. Disponible en: https://www.kaggle.com/abcsds/pokemon
+
+
+
+
+
