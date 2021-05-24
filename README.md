@@ -13,7 +13,7 @@ Repositorio creado para la Práctica 2 de la asignatura Tipología y Ciclo de Vi
 ## Estructura del proyecto
 
     .
-    ├── dataset                 # Final resulting cleaned dataset
+    ├── datasets                # Original dataset and final resulting cleaned dataset
     ├── docs                    # Documentation files & result PDF with the required answers
     ├── images                  # Image files for documentation
     ├── src                     # Source files (.R format)  
