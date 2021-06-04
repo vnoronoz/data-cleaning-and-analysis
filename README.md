@@ -38,3 +38,7 @@ Este proyecto está disponible bajo la licencia Creative Commons Zero v1.0 Unive
 Se puede acceder a la licencia [aquí](LICENSE).
 
 ## Recursos
+
+SUBIRATS MATÉ, Laia, CALVO GONZÁLEZ, Mireia y PÉREZ TRENARD, Diego Oswaldo. Introducción a la limpieza y análisis de los datos. [en línea]. Barcelona: UOC, (s/f). Disponible en: https://materials.campus.uoc.edu/daisy/Materials/PID_00265704/pdf/PID_00265704.pdf
+
+Pokemon with stats. [en línea]. [fecha de consulta:17 de mayo 2021]. Disponible en: https://www.kaggle.com/abcsds/pokemon
